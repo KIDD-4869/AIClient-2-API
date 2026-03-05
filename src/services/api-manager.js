@@ -35,7 +35,7 @@ export async function handleAPIRequests(method, path, req, res, currentConfig, a
 
     // Route content generation requests
     if (method === 'POST') {
-        if (path === '/v1/chat/completions') {
+        if (path === '/v1/chat/completions' || path === '/chat/completions') {
             await handleContentGenerationRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_CHAT, currentConfig, promptLogFilename, providerPoolManager, currentConfig.uuid, path);
             return true;
         }
