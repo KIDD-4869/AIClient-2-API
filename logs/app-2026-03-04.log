@@ -1,3 +1,0 @@
-[2026-03-05 14:27:52.847] [INFO] [API Potluck] Running scheduled health sync from pool...
-[2026-03-05 14:27:52.849] [INFO] [API Potluck] Health sync complete: 0/0 healthy
-[2026-03-05 14:28:17.234] [INFO] [Server] Received SIGINT
