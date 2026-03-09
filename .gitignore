@@ -13,6 +13,9 @@ usage-cache.json
 *-auth-token.json
 api-potluck-keys.json
 api-potluck-data.json
+# OpenClaw docker-compose (contains secrets)
+docker/docker-compose.openclaw.yml
+
 # Codex credentials
 configs/codex/
 
