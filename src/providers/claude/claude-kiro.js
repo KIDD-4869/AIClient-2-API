@@ -1518,9 +1518,9 @@ async saveCredentialsToFile(filePath, newData) {
                 await this._handle402Error(error, 'callApi');
             }
 
-            // Handle 403 (Forbidden) - mark as unhealthy immediately, no retry
+            // Handle 403 (Forbidden) - synchronously refresh token and retry once
             if (status === 403 && !isRetry) {
-                logger.info('[Kiro] Received 403. Marking credential as need refresh...');
+                logger.info('[Kiro] Received 403. Checking error type...');
                 
                 // 检查是否为 temporarily suspended 错误
                 const isSuspended = errorMessage && errorMessage.toLowerCase().includes('temporarily is suspended');
@@ -1529,20 +1529,26 @@ async saveCredentialsToFile(filePath, newData) {
                     // temporarily suspended 错误：直接标记为不健康，不刷新 UUID
                     logger.info('[Kiro] Account temporarily suspended. Marking as unhealthy without UUID refresh...');
                     this._markCredentialUnhealthy('403 Forbidden - Account temporarily suspended', error);
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                    throw error;
                 } else {
-                    // 其他 403 错误：先刷新 UUID，然后标记需要刷新
-                    // const newUuid = this._refreshUuid();
-                    // if (newUuid) {
-                    //     logger.info(`[Kiro] UUID refreshed: ${this.uuid} -> ${newUuid}`);
-                    //     this.uuid = newUuid;
-                    // }
-                    this._markCredentialNeedRefresh('403 Forbidden', error);
+                    // 其他 403 错误（session 过期）：同步刷新 token 后立即重试
+                    logger.info('[Kiro] Session expired (403). Attempting synchronous token refresh and retry...');
+                    try {
+                        await this.initializeAuth(true); // 强制同步刷新 token
+                        logger.info('[Kiro] Token refreshed successfully after 403. Retrying request...');
+                        // 刷新成功后，使用新 token 重试一次（标记 isRetry=true 防止无限循环）
+                        return await this.callApi(method, model, body, true, retryCount);
+                    } catch (refreshError) {
+                        logger.error('[Kiro] Synchronous token refresh failed after 403:', refreshError.message);
+                        // 刷新失败，回退到原有的凭证切换逻辑
+                        this._markCredentialNeedRefresh('403 Forbidden - Refresh failed', error);
+                        error.shouldSwitchCredential = true;
+                        error.skipErrorCount = true;
+                        throw error;
+                    }
                 }
-                
-                // Mark error for credential switch without recording error count
-                error.shouldSwitchCredential = true;
-                error.skipErrorCount = true;
-                throw error;
             }
             
             // Handle 429 (Too Many Requests) - wait baseDelay then switch credential
@@ -2053,9 +2059,9 @@ async saveCredentialsToFile(filePath, newData) {
                 await this._handle402Error(error, 'stream');
             }
 
-            // Handle 403 (Forbidden) - mark as unhealthy immediately, no retry
+            // Handle 403 (Forbidden) - synchronously refresh token and retry once
             if (status === 403 && !isRetry) {
-                logger.info('[Kiro] Received 403 in stream. Marking credential as need refresh...');
+                logger.info('[Kiro] Received 403 in stream. Checking error type...');
                 
                 // 检查是否为 temporarily suspended 错误
                 const isSuspended = errorMessage && errorMessage.toLowerCase().includes('temporarily is suspended');
@@ -2064,20 +2070,27 @@ async saveCredentialsToFile(filePath, newData) {
                     // temporarily suspended 错误：直接标记为不健康，不刷新 UUID
                     logger.info('[Kiro] Account temporarily suspended in stream. Marking as unhealthy without UUID refresh...');
                     this._markCredentialUnhealthy('403 Forbidden - Account temporarily suspended', error);
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                    throw error;
                 } else {
-                    // 其他 403 错误：先刷新 UUID，然后标记需要刷新
-                    // const newUuid = this._refreshUuid();
-                    // if (newUuid) {
-                    //     logger.info(`[Kiro] UUID refreshed: ${this.uuid} -> ${newUuid}`);
-                    //     this.uuid = newUuid;
-                    // }
-                    this._markCredentialNeedRefresh('403 Forbidden', error);
+                    // 其他 403 错误（session 过期）：同步刷新 token 后立即重试
+                    logger.info('[Kiro] Session expired (403) in stream. Attempting synchronous token refresh and retry...');
+                    try {
+                        await this.initializeAuth(true); // 强制同步刷新 token
+                        logger.info('[Kiro] Token refreshed successfully after 403 in stream. Retrying stream...');
+                        // 刷新成功后，使用新 token 重试一次（标记 isRetry=true 防止无限循环）
+                        yield* this.streamApiReal(method, model, body, true, retryCount);
+                        return;
+                    } catch (refreshError) {
+                        logger.error('[Kiro] Synchronous token refresh failed after 403 in stream:', refreshError.message);
+                        // 刷新失败，回退到原有的凭证切换逻辑
+                        this._markCredentialNeedRefresh('403 Forbidden in stream - Refresh failed', error);
+                        error.shouldSwitchCredential = true;
+                        error.skipErrorCount = true;
+                        throw error;
+                    }
                 }
-
-                // Mark error for credential switch without recording error count
-                error.shouldSwitchCredential = true;
-                error.skipErrorCount = true;
-                throw error;
             }
             
             // Handle 429 (Too Many Requests) - wait baseDelay then switch credential
